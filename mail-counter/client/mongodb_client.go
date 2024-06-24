@@ -23,15 +23,15 @@ var (
 )
 
 type MailLog struct {
-	QueueId             string    `bson:"QueueId"`
-	From                string    `bson:"from"`
-	To                  string    `bson:"to"`
-	MessageId           string    `bson:"MessageId"`
-	RecipientSmtpIp     string    `bson:"RecipientSmtpIp"`
-	RecipientSmtpDomain string    `bson:"RecipientSmtpDomain"`
-	Status              string    `bson:"status"`
-	Message             string    `bson:"message"`
-	SentAt              time.Time `bson:"SentAt"`
+	QueueId      string    `bson:"QueueId"`
+	From         string    `bson:"From"`
+	To           string    `bson:"To"`
+	DomainFrom   string    `bson:"DomainFrom"`
+	DomainTo     string    `bson:"DomainTo"`
+	MessageId    string    `bson:"MessageId"`
+	SenderSmtpIp string    `bson:"SenderSmtpIp"`
+	Status       string    `bson:"Status"`
+	SentAt       time.Time `bson:"SentAt"`
 }
 
 func ConvertToTimeMST(timeStr string) time.Time {
@@ -70,7 +70,7 @@ func CreateLog(task MailLog) error {
 
 func GetManyLogs(key string, value string, fromDate time.Time, toDate time.Time) ([]MailLog, error) {
 	filter := bson.M{
-		"sent_at": bson.M{
+		"SentAt": bson.M{
 			"$gte": primitive.NewDateTimeFromTime(fromDate),
 			"$lt":  primitive.NewDateTimeFromTime(toDate),
 		},
@@ -105,12 +105,14 @@ func GetManyLogs(key string, value string, fromDate time.Time, toDate time.Time)
 	return mailLog, nil
 }
 
-func UpdateLog(queueId string, key string, value string) error {
-	filter := bson.D{primitive.E{Key: "queueId", Value: queueId}}
+func UpdateLog(queueId string, to string, key string, value string) error {
+	filter := bson.D{
+		primitive.E{Key: "QueueId", Value: queueId},
+	}
 	updater := bson.D{primitive.E{Key: "$set", Value: bson.D{
 		primitive.E{Key: key, Value: value},
 	}}}
-	if key == "sentAt" {
+	if key == "SentAt" {
 		updater = bson.D{primitive.E{Key: "$set", Value: bson.D{
 			primitive.E{Key: key, Value: ConvertToTimeMST(value)},
 		}}}
@@ -129,9 +131,29 @@ func UpdateLog(queueId string, key string, value string) error {
 	return nil
 }
 
-func GetLogByQueueId(queueId string) (MailLog, error) {
+func GetLog(key string, value string) (MailLog, error) {
 	result := MailLog{}
-	filter := bson.D{primitive.E{Key: "queue_id", Value: queueId}}
+	filter := bson.D{primitive.E{Key: key, Value: value}}
+	client, err := GetMongoClient()
+	if err != nil {
+		return result, err
+	}
+	collection := client.Database(DB).Collection(MailLogs)
+	err = collection.FindOne(context.TODO(), filter).Decode(&result)
+	if err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func GetLogs(key string, value string) (MailLog, error) {
+	result := MailLog{}
+	filter := bson.D{
+		primitive.E{
+			Key:   key,
+			Value: value,
+		},
+	}
 	client, err := GetMongoClient()
 	if err != nil {
 		return result, err
